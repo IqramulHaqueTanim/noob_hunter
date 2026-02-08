@@ -45,7 +45,6 @@
             cursor: none;
             z-index: 5;
             filter: drop-shadow(0 0 15px rgba(255, 0, 0, 0.8));
-            /* Disable blue highlight on mobile tap */
             -webkit-tap-highlight-color: transparent;
         }
 
@@ -126,7 +125,13 @@
     <script>
         // --- CONFIGURATION ---
         const friendImageURL = 'mahiHead.png'; 
-        const PIXELS_PER_SECOND = 500; 
+        
+        // --- SMART SPEED SETTINGS (The Fix) ---
+        // We check if the screen is small (less than 768px wide)
+        const isMobile = window.innerWidth < 768;
+
+        // If it's mobile, we use 280 (Slower). If PC, we use 500 (Faster).
+        const PIXELS_PER_SECOND = isMobile ? 280 : 500; 
 
         // --- VARIABLES ---
         let score = 0;
@@ -145,8 +150,6 @@
         const finalScoreEl = document.getElementById('final-score');
         const container = document.getElementById('game-container');
         const knife = document.getElementById('knife-cursor');
-        
-        // Audio
         const music = document.getElementById('bg-music');
         const hitSound = document.getElementById('hit-sound');
 
@@ -155,14 +158,13 @@
         hitSound.volume = 1.0; 
 
         // --- MOUSE MOVEMENT (PC) ---
-        // This handles moving the knife when you hover with a mouse
         document.addEventListener('mousemove', (e) => {
             knife.style.display = 'block';
             knife.style.left = e.pageX + 'px';
             knife.style.top = e.pageY + 'px';
         });
 
-        // --- MOVEMENT LOGIC (Head) ---
+        // --- MOVEMENT LOGIC ---
         function moveHead() {
             if (!isPlaying) return;
 
@@ -179,6 +181,8 @@
             const deltaX = nextX - currentX;
             const deltaY = nextY - currentY;
             const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            
+            // Calculate time based on our smart speed setting
             const durationInSeconds = distance / PIXELS_PER_SECOND;
 
             head.style.transition = `top ${durationInSeconds}s linear, left ${durationInSeconds}s linear, transform ${durationInSeconds}s linear`;
@@ -192,13 +196,12 @@
             moveTimer = setTimeout(moveHead, durationInSeconds * 1000);
         }
 
-        // --- HIT LOGIC (PC & Mobile) ---
+        // --- HIT LOGIC ---
         function hitHead(e) {
             if (!isPlaying) return;
             e.preventDefault(); 
             e.stopPropagation();
 
-            // 1. Get Coordinates (Works for Mouse OR Touch)
             let clientX, clientY;
             if (e.type === 'touchstart') {
                 clientX = e.touches[0].clientX;
@@ -208,18 +211,14 @@
                 clientY = e.clientY;
             }
 
-            // 2. FORCE KNIFE TO POSITION (Crucial for Mobile)
-            // On mobile, the knife might be hidden or in the wrong spot.
-            // We force it to appear exactly where you tapped.
+            // Force Knife Position
             knife.style.display = 'block';
             knife.style.left = clientX + 'px';
             knife.style.top = clientY + 'px';
 
-            // 3. Play Sound
             hitSound.currentTime = 0; 
             hitSound.play();
 
-            // 4. Slash Visual
             const slash = document.createElement('div');
             slash.classList.add('slash');
             slash.style.left = (clientX - 50) + 'px';
@@ -228,8 +227,6 @@
             container.appendChild(slash);
             setTimeout(() => slash.remove(), 200);
 
-            // 5. Knife Recoil Animation
-            // We use 'translate(-50%, -50%)' to keep it centered on the finger
             knife.style.transform = "translate(-50%, -50%) rotate(-45deg) scale(1.2)";
             setTimeout(() => {
                 knife.style.transform = "translate(-50%, -50%) rotate(0deg) scale(1)";
@@ -253,13 +250,10 @@
             score = 0;
             timeLeft = 30;
             isPlaying = true;
-            
             scoreEl.innerText = score;
             timeEl.innerText = timeLeft;
             gameOverScreen.style.display = 'none';
-            
             moveHead();
-
             clearInterval(gameTimer);
             gameTimer = setInterval(() => {
                 timeLeft--;
