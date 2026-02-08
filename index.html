@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Head Hunter</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #222;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none; /* Crucial for mobile performance */
+            cursor: none; 
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: radial-gradient(circle, #333, #000);
+            cursor: none; 
+        }
+
+        /* --- THE KNIFE --- */
+        #knife-cursor {
+            position: absolute;
+            width: 80px; /* Knife Size */
+            pointer-events: none; 
+            z-index: 1000;
+            /* Center the knife on the touch point */
+            transform: translate(-50%, -50%); 
+            display: none; /* Hidden until first move/touch */
+            transition: transform 0.05s; 
+        }
+
+        #head {
+            position: absolute;
+            width: 120px;
+            height: 120px;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            background-color: transparent;
+            cursor: none;
+            z-index: 5;
+            filter: drop-shadow(0 0 15px rgba(255, 0, 0, 0.8));
+            /* Disable blue highlight on mobile tap */
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* --- SLASH EFFECT --- */
+        .slash {
+            position: absolute;
+            width: 100px;
+            height: 5px;
+            background: white;
+            box-shadow: 0 0 10px cyan;
+            pointer-events: none;
+            z-index: 10;
+            animation: slashAnim 0.2s forwards;
+        }
+
+        @keyframes slashAnim {
+            0% { transform: scaleX(0); opacity: 1; }
+            100% { transform: scaleX(1); opacity: 0; }
+        }
+
+        #ui-layer {
+            position: absolute; top: 20px; left: 0; width: 100%;
+            display: flex; justify-content: space-around;
+            color: white; font-size: 28px; font-weight: bold;
+            pointer-events: none; z-index: 20;
+            text-shadow: 2px 2px 4px #000;
+        }
+
+        .overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            color: white; z-index: 30;
+            cursor: default; 
+        }
+
+        button {
+            padding: 15px 40px; font-size: 22px;
+            background: #e74c3c; color: white; border: none;
+            border-radius: 50px; cursor: pointer; margin-top: 20px;
+            font-weight: bold; box-shadow: 0 5px #c0392b;
+        }
+        button:active { transform: translateY(4px); box-shadow: none; }
+    </style>
+</head>
+<body>
+
+    <audio id="bg-music" loop>
+        <source src="music.mp3" type="audio/mp3">
+    </audio>
+
+    <audio id="hit-sound">
+        <source src="hit.mp3" type="audio/mp3">
+    </audio>
+
+    <img id="knife-cursor" src="mahiKnife.png" alt="Knife">
+
+    <div id="game-container">
+        <div id="ui-layer">
+            <div style="color: #e74c3c;">Score: <span id="score">0</span></div>
+            <div style="color: #3498db;">Time: <span id="time">30</span></div>
+        </div>
+        <div id="head"></div>
+    </div>
+
+    <div id="start-screen" class="overlay">
+        <h1>NOOB HUNTER</h1>
+        <button onclick="initGame()">START GAME</button>
+    </div>
+
+    <div id="game-over" class="overlay" style="display: none;">
+        <h1 style="color: #e74c3c;">TIME'S UP!</h1>
+        <p>Final Score: <span id="final-score" style="color: yellow; font-size: 2rem;">0</span></p>
+        <button onclick="restartGame()">PLAY AGAIN</button>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const friendImageURL = 'mahiHead.png'; 
+        const PIXELS_PER_SECOND = 500; 
+
+        // --- VARIABLES ---
+        let score = 0;
+        let timeLeft = 30;
+        let gameTimer;
+        let moveTimer;
+        let isPlaying = false;
+        let rotation = 0;
+
+        // --- ELEMENTS ---
+        const head = document.getElementById('head');
+        const scoreEl = document.getElementById('score');
+        const timeEl = document.getElementById('time');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over');
+        const finalScoreEl = document.getElementById('final-score');
+        const container = document.getElementById('game-container');
+        const knife = document.getElementById('knife-cursor');
+        
+        // Audio
+        const music = document.getElementById('bg-music');
+        const hitSound = document.getElementById('hit-sound');
+
+        head.style.backgroundImage = `url('${friendImageURL}')`;
+        music.volume = 0.5; 
+        hitSound.volume = 1.0; 
+
+        // --- MOUSE MOVEMENT (PC) ---
+        // This handles moving the knife when you hover with a mouse
+        document.addEventListener('mousemove', (e) => {
+            knife.style.display = 'block';
+            knife.style.left = e.pageX + 'px';
+            knife.style.top = e.pageY + 'px';
+        });
+
+        // --- MOVEMENT LOGIC (Head) ---
+        function moveHead() {
+            if (!isPlaying) return;
+
+            const currentRect = head.getBoundingClientRect();
+            const currentX = currentRect.left;
+            const currentY = currentRect.top;
+
+            const maxX = container.clientWidth - 120;
+            const maxY = container.clientHeight - 120;
+
+            const nextX = Math.floor(Math.random() * maxX);
+            const nextY = Math.floor(Math.random() * maxY);
+
+            const deltaX = nextX - currentX;
+            const deltaY = nextY - currentY;
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            const durationInSeconds = distance / PIXELS_PER_SECOND;
+
+            head.style.transition = `top ${durationInSeconds}s linear, left ${durationInSeconds}s linear, transform ${durationInSeconds}s linear`;
+            head.style.left = nextX + 'px';
+            head.style.top = nextY + 'px';
+            
+            rotation += 360; 
+            head.style.transform = `rotate(${rotation}deg)`;
+
+            clearTimeout(moveTimer);
+            moveTimer = setTimeout(moveHead, durationInSeconds * 1000);
+        }
+
+        // --- HIT LOGIC (PC & Mobile) ---
+        function hitHead(e) {
+            if (!isPlaying) return;
+            e.preventDefault(); 
+            e.stopPropagation();
+
+            // 1. Get Coordinates (Works for Mouse OR Touch)
+            let clientX, clientY;
+            if (e.type === 'touchstart') {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+
+            // 2. FORCE KNIFE TO POSITION (Crucial for Mobile)
+            // On mobile, the knife might be hidden or in the wrong spot.
+            // We force it to appear exactly where you tapped.
+            knife.style.display = 'block';
+            knife.style.left = clientX + 'px';
+            knife.style.top = clientY + 'px';
+
+            // 3. Play Sound
+            hitSound.currentTime = 0; 
+            hitSound.play();
+
+            // 4. Slash Visual
+            const slash = document.createElement('div');
+            slash.classList.add('slash');
+            slash.style.left = (clientX - 50) + 'px';
+            slash.style.top = clientY + 'px';
+            slash.style.transform = `rotate(${Math.random() * 360}deg)`;
+            container.appendChild(slash);
+            setTimeout(() => slash.remove(), 200);
+
+            // 5. Knife Recoil Animation
+            // We use 'translate(-50%, -50%)' to keep it centered on the finger
+            knife.style.transform = "translate(-50%, -50%) rotate(-45deg) scale(1.2)";
+            setTimeout(() => {
+                knife.style.transform = "translate(-50%, -50%) rotate(0deg) scale(1)";
+            }, 100);
+
+            score++;
+            scoreEl.innerText = score;
+
+            clearTimeout(moveTimer);
+            moveHead(); 
+        }
+
+        // --- GAME LOOP ---
+        function initGame() {
+            startScreen.style.display = 'none';
+            music.play().catch(e => console.log(e));
+            restartGame();
+        }
+
+        function restartGame() {
+            score = 0;
+            timeLeft = 30;
+            isPlaying = true;
+            
+            scoreEl.innerText = score;
+            timeEl.innerText = timeLeft;
+            gameOverScreen.style.display = 'none';
+            
+            moveHead();
+
+            clearInterval(gameTimer);
+            gameTimer = setInterval(() => {
+                timeLeft--;
+                timeEl.innerText = timeLeft;
+                if (timeLeft <= 0) endGame();
+            }, 1000);
+        }
+
+        function endGame() {
+            isPlaying = false;
+            clearInterval(gameTimer);
+            clearTimeout(moveTimer);
+            finalScoreEl.innerText = score;
+            gameOverScreen.style.display = 'flex';
+        }
+
+        head.addEventListener('mousedown', hitHead);
+        head.addEventListener('touchstart', hitHead);
+
+    </script>
+</body>
+</html>
